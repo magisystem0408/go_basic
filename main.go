@@ -3,37 +3,36 @@ package main
 import (
 	"context"
 	"fmt"
+	"golang.org/x/sync/semaphore"
 	"time"
 )
 
-func longProcess(ctx context.Context, ch chan string) {
-	fmt.Println("run")
-	time.Sleep(2 * time.Second)
-	fmt.Println("finish")
-	ch <- "result"
-}
-func main() {
-	ch := make(chan string)
-	//タイムアウトの設定などに使える
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+// go routineの走っている数を限定することができる
 
-	//空のcontextを使用したい時、TODO()
-	//ctx := context.TODO()
+//何個同時に走らせられるか
+var s *semaphore.Weighted = semaphore.NewWeighted(1)
 
-	defer cancel()
-	go longProcess(ctx, ch)
-
-CTXLOOP:
-	for {
-		select {
-		case <-ctx.Done():
-			fmt.Println(ctx.Err())
-			break CTXLOOP
-		case <-ch:
-			fmt.Println("success")
-			break CTXLOOP
-		}
+func longProcess(ctx context.Context) {
+	isAcquire := s.TryAcquire(1)
+	if !isAcquire {
+		fmt.Println("could not get lock")
+		return
 	}
-	fmt.Println("###########")
+
+	////	contextのなかでaquireしたものがこのプロセスを走らせられる
+	//if err := s.Acquire(ctx, 1); err != nil {
+	//	fmt.Println(err)
+	//	return
+	//}
+	defer s.Release(1)
+	time.Sleep(1 * time.Second)
+	fmt.Println("Done")
+
+}
+
+func main() {
+	ctx := context.TODO()
+	go longProcess(ctx)
+	time.Sleep(5 * time.Second)
+
 }
